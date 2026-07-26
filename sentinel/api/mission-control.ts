@@ -3,8 +3,13 @@ import { db } from "../lib/db";
 import { env } from "../lib/env";
 
 // Mission Control snapshot: the dashboard views in one JSON payload.
+// Admin-only. SENTINEL_ADMIN_SECRET is a distinct secret from anything a
+// browser client calls (see api/goals/decompose.ts) — it must never be
+// shipped to end-user clients, since this endpoint returns global
+// operational data (all goals' costs, the approval queue, kill switch and
+// budget controls) with no per-user scoping.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.headers.authorization !== `Bearer ${env("SENTINEL_API_SECRET")}`) {
+  if (req.headers.authorization !== `Bearer ${env("SENTINEL_ADMIN_SECRET")}`) {
     return res.status(401).json({ error: "unauthorized" });
   }
   try {

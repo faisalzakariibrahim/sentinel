@@ -33,15 +33,24 @@ per-role kill switches, and a full audit log wrap the whole loop.
 | Route | Method | Auth | Purpose |
 |---|---|---|---|
 | `/api/tick` | GET (cron, every 5 min) | `Bearer $CRON_SECRET` | The loop: guards → apply approval decisions → run a bounded batch of unblocked/repair tasks → execute → judge → route → trust decay → complete finished goals |
-| `/api/goals/decompose` | POST `{"goal_id": "<uuid>"}` | `Bearer $SENTINEL_API_SECRET` | Fired once per goal submission: Decomposer (Sonnet) → validate graph against the registry → deterministic risk scoring + Level 3 propagation → insert tasks/edges as `pending` |
-| `/api/mission-control` | GET | `Bearer $SENTINEL_API_SECRET` | Dashboard snapshot: summary, pending approvals, cost by tool, 7-day judge stats, controls |
+| `/api/goals/decompose` | POST `{"goal_id": "<uuid>"}` | `Bearer <caller's own Supabase access token>` | Fired once per goal submission: verify the JWT, enforce `goals.user_id = caller` → Decomposer (Sonnet) → validate graph against the registry → deterministic risk scoring + Level 3 propagation → insert tasks/edges as `pending` |
+| `/api/mission-control` | GET | `Bearer $SENTINEL_ADMIN_SECRET` (admin only — never given to a browser client) | Dashboard snapshot: summary, pending approvals, cost by tool, 7-day judge stats, controls |
+
+There is no shared secret for `/api/goals/decompose` — it authenticates
+each request as the specific end user who owns the goal (`lib/auth.ts`
+verifies the token against `SUPABASE_JWT_SECRET`; `lib/decomposer.ts`
+rejects any `goal_id` the caller doesn't own with the same 404 whether
+the goal is missing or belongs to someone else). `SENTINEL_ADMIN_SECRET`
+is a completely separate secret scoped to `/api/mission-control` only,
+since that endpoint returns global data with no per-user scoping — it
+must never reach client code.
 
 Key modules: `lib/tick.ts` (state machine), `lib/decomposer.ts`,
 `lib/judge.ts` (Haiku for Level 1, Sonnet for Level 2+/sensitive, never
 cheaper than the executor's model), `lib/risk.ts` (deterministic
 formula), `lib/executor.ts` (handler registry keyed by
 `tool_registry.handler_ref`), `lib/guards.ts` (kill switch + rolling
-cost-window budget).
+cost-window budget), `lib/auth.ts` (per-user Supabase JWT verification).
 
 Environment variables: see `.env.example`. Deploy with the repo root set
 to this directory; `vercel.json` registers the cron and ships
@@ -51,7 +60,9 @@ Submitting a goal end to end:
 
 1. Client inserts a row into `goals` via Supabase (RLS scopes it to the
    user) — status starts as `decomposing`.
-2. Client calls `POST /api/goals/decompose` with the goal id.
+2. Client calls `POST /api/goals/decompose` with the goal id, sending its
+   own Supabase access token as the bearer (the same token the client
+   already holds from its Supabase session — no separate secret to manage).
 3. The next tick picks up unblocked tasks; Level 1 passes complete
    autonomously, everything else lands in `approval_queue`.
 4. The user approves/rejects via Supabase (RLS `approval_decide`

@@ -31,6 +31,11 @@ export interface DecomposeResult {
   costUsd: number;
 }
 
+// Thrown for both a missing goal and an ownership mismatch — the caller
+// gets the same response either way, so this endpoint can't be used to
+// probe which goal ids exist for other users.
+export class GoalNotFoundError extends Error {}
+
 // Kahn topological sort; throws on cycles. Returns task ids in dependency order.
 function topoSort(taskIds: string[], edges: { from: string; to: string }[]): string[] {
   const indegree = new Map(taskIds.map((id) => [id, 0]));
@@ -54,14 +59,19 @@ function topoSort(taskIds: string[], edges: { from: string; to: string }[]): str
   return order;
 }
 
-export async function decomposeGoal(goalId: string): Promise<DecomposeResult> {
+export async function decomposeGoal(goalId: string, callerUserId: string): Promise<DecomposeResult> {
   const goal = (
-    await db().query<{ id: string; raw_input: string; status: string }>(
-      `select id, raw_input, status from goals where id = $1`,
+    await db().query<{ id: string; raw_input: string; status: string; user_id: string }>(
+      `select id, raw_input, status, user_id from goals where id = $1`,
       [goalId],
     )
   ).rows[0];
-  if (!goal) throw new Error(`Goal ${goalId} not found`);
+  // Ownership check comes before anything else touches the row — the caller
+  // authenticated as themselves (see lib/auth.ts), so a goal_id belonging to
+  // another user must be indistinguishable from one that doesn't exist.
+  if (!goal || goal.user_id !== callerUserId) {
+    throw new GoalNotFoundError(`Goal ${goalId} not found`);
+  }
   if (goal.status !== "decomposing") {
     throw new Error(`Goal ${goalId} is in status '${goal.status}', expected 'decomposing'`);
   }
