@@ -3,8 +3,8 @@
 #
 # Spins up a throwaway local Postgres (15+), stubs the Supabase pieces the
 # schema relies on (anon/authenticated roles, auth.uid(), default grants),
-# applies the original v2 migration, runs attack checks, applies the
-# security-fix migration, and runs them again.
+# applies the original v2 migration, runs attack checks, applies every
+# later migration, and runs the security and integrity checks again.
 #
 # BEFORE FIX: FAIL lines are the vulnerabilities the fix closes.
 # AFTER FIX:  every line must be PASS. The script exits 1 otherwise.
@@ -40,10 +40,15 @@ psql_ -q -f "$here/10_seed.sql"
 echo "================ BEFORE FIX (original v2 schema) ================"
 checks "$here/20_checks.sql"
 
-psql_ -q -f "$migrations/20260726000001_sentinel_v2_security_fixes.sql"
+# every later migration, in filename order
+for m in "$migrations"/*.sql; do
+  case "$m" in *_sentinel_v2_core.sql) continue ;; esac
+  psql_ -q -f "$m"
+  echo "applied $(basename "$m")"
+done
 
 echo "================ AFTER FIX ================"
-after=$( { checks "$here/20_checks.sql"; checks "$here/30_admin_checks.sql"; } )
+after=$( { checks "$here/20_checks.sql"; checks "$here/30_admin_checks.sql"; checks "$here/40_integrity_checks.sql"; } )
 echo "$after"
 fails=$(echo "$after" | grep -c '^FAIL' || true)
 echo "----------------"

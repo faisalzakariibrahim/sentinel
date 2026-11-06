@@ -51,7 +51,7 @@ select t('ok A sees own goal graph',
 select t('ok A sees own task edges',
   $q$select * from task_edges$q$, 'rows=1');
 select t('ok A approves own approval row',
-  $q$update approval_queue set decision = 'approved', decided_by = 'aaaaaaaa-0000-0000-0000-000000000001', decided_at = now() where id = '33333333-0000-0000-0000-000000000001'$q$, 'rows=1');
+  $q$update approval_queue set decision = 'approved', decided_by = 'aaaaaaaa-0000-0000-0000-000000000001' where id = '33333333-0000-0000-0000-000000000001'$q$, 'rows=1');
 select t('1  A lowers the tier on own approval row',
   $q$update approval_queue set tier = 1 where id = '33333333-0000-0000-0000-000000000001'$q$, 'error');
 reset role;

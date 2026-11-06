@@ -57,7 +57,7 @@ Output valid JSON only, matching this schema:
 
 - `confidence: "low"` on a pass should still route to Level 2 approval,
   never chain autonomously into the next task.
-- `scope_violation: true` forces `tier = max(effective_risk, 2)` in the
+- `scope_violation: true` forces `tier = max(task.approval_tier, 2)` in the
   approval_queue insert, regardless of the task's original score.
 - `attempt_count` cap (suggested: 3) on repair verdicts before forcing
   escalation to Level 2 regardless of computed risk — prevents an

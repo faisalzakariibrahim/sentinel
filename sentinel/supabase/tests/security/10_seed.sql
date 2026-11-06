@@ -8,7 +8,8 @@ insert into tool_registry (name, description, base_risk, irreversible, handler_r
 values ('web_search', 'search', 0, false, 'tools/web_search'),
        ('send_email', 'email', 2, true, 'tools/send_email');
 insert into agent_roles (name, system_prompt, allowed_tools)
-values ('researcher', 'You research.', '{web_search}');
+values ('researcher', 'You research.', '{web_search}'),
+       ('communicator', 'You send approved messages.', '{send_email}');
 
 insert into goals (id, user_id, raw_input, status)
 values ('11111111-0000-0000-0000-000000000001',
@@ -19,7 +20,7 @@ values
  ('22222222-0000-0000-0000-000000000001', '11111111-0000-0000-0000-000000000001',
   'Research target', 'web_search', 'researcher', 'awaiting_approval', 2, '{"summary":"confidential"}'),
  ('22222222-0000-0000-0000-000000000002', '11111111-0000-0000-0000-000000000001',
-  'Email the board', 'send_email', 'researcher', 'pending', 3, null);
+  'Email the board', 'send_email', 'communicator', 'pending', 3, null);
 
 -- t2 is blocked until t1 is approved
 insert into task_edges values
