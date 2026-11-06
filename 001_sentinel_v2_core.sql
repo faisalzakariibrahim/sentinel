@@ -194,7 +194,7 @@ create index on audit_log using gin (payload jsonb_path_ops);
 -- ROLES & GRANTS
 -- ============================================================
 
-create role sentinel_executor login password 'CHANGE_ME' noinherit;
+create role sentinel_executor login password '__SENTINEL_EXECUTOR_PASSWORD__' noinherit; -- placeholder; see sentinel/supabase/migrations/20260726000001_sentinel_v2_security_fixes.sql
 
 grant select, insert, update on tasks, task_edges, judgments, audit_log to sentinel_executor;
 grant select, insert on episodic_memory, task_patterns to sentinel_executor;
@@ -382,4 +382,4 @@ select
   (select count(*) from approval_queue where decision is null) as pending_approvals,
   (select count(*) from approval_queue where decision is null and tier = 3) as pending_level3,
   (select sum(cost_usd) from tasks where created_at > now() - interval '24h') as spend_24h,
-  (select round(avg(pass_rate_pct),1) from judge_stats_last_7d) as avg_pass_rate_7d;
+  (select round(avg(pass_rate_7d),1) from judge_stats_last_7d) as avg_pass_rate_7d;

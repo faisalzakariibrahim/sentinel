@@ -54,8 +54,19 @@ via `unblocked_tasks` naturally.
 
 ## Before running the migration
 
-- Replace `'CHANGE_ME'` in the `sentinel_executor` role creation with a
-  real secret, stored in Vercel env / Supabase Vault — never in the repo.
+- Apply both migrations in order: `20260726000000_sentinel_v2_core.sql`
+  then `20260726000001_sentinel_v2_security_fixes.sql`. The second one
+  closes RLS gaps, gates tool approval behind `sentinel_admins`, makes the
+  dashboard views respect RLS, and gives `sentinel_executor` the policies
+  it needs. It also leaves `sentinel_executor` disabled with no password.
+- Then set the executor password and turn login on — the password never
+  goes in the repo:
+  `DATABASE_URL=postgres://... PRINT_PASSWORD=1 ./scripts/set_sentinel_secret.sh`
+  and put the printed value in your Vercel env.
+- Make yourself an admin so you can review tool registrations:
+  `insert into public.sentinel_admins (user_id) values ('<your auth.users id>');`
+- Security regression tests: `./supabase/tests/security/run.sh`
+  (needs a local Postgres 15+; every line after the fix must PASS).
 - Confirm the `vector` extension is enabled on your Supabase project
   (Flicktek org) before this runs — it's in the migration but Supabase
   sometimes needs it toggled in the dashboard first on fresh projects.

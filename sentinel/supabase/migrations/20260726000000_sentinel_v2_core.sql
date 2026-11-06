@@ -386,4 +386,4 @@ select
   (select count(*) from approval_queue where decision is null) as pending_approvals,
   (select count(*) from approval_queue where decision is null and tier = 3) as pending_level3,
   (select sum(cost_usd) from tasks where created_at > now() - interval '24h') as spend_24h,
-  (select round(avg(pass_rate_pct),1) from judge_stats_last_7d) as avg_pass_rate_7d;
+  (select round(avg(pass_rate_7d),1) from judge_stats_last_7d) as avg_pass_rate_7d;
