@@ -57,6 +57,9 @@ Output valid JSON only, matching this schema:
 
 - `confidence: "low"` on a pass should still route to Level 2 approval,
   never chain autonomously into the next task.
+- For a pre-approved task, also pass the approved `planned_call` and fail
+  the task (scope_violation: true) if the call actually made differs from
+  it in any field.
 - `scope_violation: true` forces `tier = max(task.approval_tier, 2)` in the
   approval_queue insert, regardless of the task's original score.
 - `attempt_count` cap (suggested: 3) on repair verdicts before forcing

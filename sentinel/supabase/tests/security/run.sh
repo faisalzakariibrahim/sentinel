@@ -48,7 +48,7 @@ for m in "$migrations"/*.sql; do
 done
 
 echo "================ AFTER FIX ================"
-after=$( { checks "$here/20_checks.sql"; checks "$here/30_admin_checks.sql"; checks "$here/40_integrity_checks.sql"; } )
+after=$( { checks "$here/20_checks.sql"; checks "$here/30_admin_checks.sql"; checks "$here/40_integrity_checks.sql"; checks "$here/50_preapproval_checks.sql"; } )
 echo "$after"
 fails=$(echo "$after" | grep -c '^FAIL' || true)
 echo "----------------"

@@ -21,6 +21,10 @@ decomposition, memory tables, and Mission Control dashboard views.
     and each role's `allowed_tools` in the database, freezes risk fields
     for the executor, adds status/tier checks, one pending approval per
     task, server-stamped `decided_at`/`updated_at`, and indexes.
+  - `20260726000003_sentinel_v2_preexecution_approval.sql` — irreversible
+    or external Level 2+ tasks (and all Level 3) are approved *before*
+    they run, against the exact `planned_call`; status guards; decisions
+    apply themselves and rejections block everything downstream.
 - `supabase/tests/security/run.sh` — local Postgres test suite for all
   of the above.
 - `agents/prompts/judge_prompt.md` — verification step system prompt +
@@ -37,30 +41,43 @@ tick →
   check budget guard (global + per-agent-role, driven by cost_by_tool /
     sum(cost_usd) over a rolling window, not raw call count)
   ↓
-  pull from `unblocked_tasks` view (bounded batch, e.g. limit 10)
+  1. gate before execution — pull from `tasks_needing_preapproval`
+     (Level 3, or Level 2+ irreversible/external; deps already done):
+     for each task:
+       build the exact tool call (recipients, body, amount, ...) without
+         running it, and in ONE update set planned_call = <call>,
+         status = awaiting_preapproval
+       insert approval_queue row (stage = 'pre_execution',
+         tier = task.approval_tier)
   ↓
-  for each task:
-    status → executing → run agent_roles[task.agent_role] executor
-    status → judging → run Judge (model tier by effective_risk)
-    insert into judgments
-    ↓
-    pass + confidence != low + !escalate:
-      effective_risk <= 1 → status = completed
-      else → status = awaiting_approval, insert approval_queue row
-        (tier = task.approval_tier)
-    repair: attempt_count += 1, status = repair (cap at 3 before
-      forcing Level 2 escalation regardless of score)
-    fail / escalate: status = awaiting_approval,
-      tier = max(task.approval_tier, 2)
-  ↓
-  separately: watch approval_queue.decision != null
-    approved → status = approved → next tick executes child tasks
-    rejected → status = rejected → dependent tasks marked blocked
-      (not silently dropped)
+  2. run — pull from `unblocked_tasks` (bounded batch, e.g. limit 10).
+     Pre-approved tasks reappear here once you approve them.
+     for each task:
+       status → executing → run agent_roles[task.agent_role] executor
+         (pre-approved tasks: execute planned_call exactly as stored)
+       status → judging → run Judge (model tier by effective_risk)
+       insert into judgments
+       ↓
+       pass + confidence != low + !escalate:
+         approval_tier = 1, or already pre-approved → status = completed
+         else → status = awaiting_approval, insert approval_queue row
+           (stage = 'post_execution', tier = task.approval_tier)
+       repair: attempt_count += 1, status = repair (cap at 3 before
+         forcing Level 2 escalation regardless of score)
+       fail / escalate: status = awaiting_approval, post_execution row,
+         tier = max(task.approval_tier, 2)
 ```
 
-`tier` is the 1–3 approval level, not the risk score — the database
-rejects an approval queued below the task's own `approval_tier`.
+Decisions apply themselves (database trigger, no polling needed):
+pre-execution approved → task back to `pending`, now runnable; post-
+execution approved → `approved`, children unblock; rejected → task
+`rejected` and every downstream task `blocked` (not silently dropped).
+
+The database refuses `executing` without a required pre-approval,
+`approved` without a human decision, `completed` for a Level 2+ task
+with no human approval, and any change to `planned_call` once it is
+under review or approved. `tier` is the 1–3 approval level, not the risk
+score, and can't be queued below the task's own `approval_tier`.
 
 Intent decomposition is a separate on-demand endpoint (fires once per
 goal submission), not part of the tick — it populates `tasks` /
@@ -76,7 +93,7 @@ never polled.
 1. Confirm the `vector` extension is enabled on your Supabase project
    (Flicktek org) — it's in the migration, but fresh projects sometimes
    need it toggled in the dashboard first.
-2. Apply the three migrations in filename order (`supabase db push`).
+2. Apply the four migrations in filename order (`supabase db push`).
 3. Set the executor password and turn login on — the password never goes
    in the repo:
    `DATABASE_URL=postgres://... PRINT_PASSWORD=1 ./scripts/set_sentinel_secret.sh`
